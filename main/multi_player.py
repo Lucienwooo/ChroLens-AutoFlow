@@ -26,13 +26,6 @@ class ElidedLabel(QLabel):
     def update_elision(self):
         metrics = QFontMetrics(self.font())
         elided = metrics.elidedText(self._full_text, Qt.TextElideMode.ElideRight, self.width())
-        super().setText(elided, is_full=False)
-
-    def setText(self, text, is_full=True):
-        if is_full:
-            self._full_text = text
-        metrics = QFontMetrics(self.font())
-        elided = metrics.elidedText(self._full_text, Qt.TextElideMode.ElideRight, self.width())
         super().setText(elided)
 
     def resizeEvent(self, event):
@@ -136,7 +129,8 @@ class MultiPlayerWindow(QDialog):
 
     def closeEvent(self, event):
         for player in self.player_widgets:
-            player.media_player.stop()
+            if player.media_player:
+                player.media_player.stop()
         super().closeEvent(event)
 
 class VideoPlayerWidget(QFrame):
@@ -149,9 +143,8 @@ class VideoPlayerWidget(QFrame):
         self.setFixedSize(540, 380) 
         self.setAcceptDrops(True)
         
-        self.media_player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.media_player.setAudioOutput(self.audio_output)
+        self.media_player = None
+        self.audio_output = None
         
         self.init_ui()
         
@@ -174,7 +167,6 @@ class VideoPlayerWidget(QFrame):
         self.video_widget.hide()
         self.video_widget.installEventFilter(self)
         v_layout.addWidget(self.video_widget)
-        self.media_player.setVideoOutput(self.video_widget)
         
         controls = QFrame()
         controls.setFixedHeight(40)
@@ -203,7 +195,7 @@ class VideoPlayerWidget(QFrame):
         self.vol_slider.setRange(0, 100)
         self.vol_slider.setValue(50)
         self.vol_slider.setFixedWidth(60)
-        self.vol_slider.valueChanged.connect(lambda v: self.audio_output.setVolume(v/100.0))
+        self.vol_slider.valueChanged.connect(lambda v: self.audio_output.setVolume(v/100.0) if self.audio_output else None)
         
         self.name_label = ElidedLabel("等待拖曳")
         self.name_label.setStyleSheet("font-size: 9px; color: gray;")
@@ -216,7 +208,6 @@ class VideoPlayerWidget(QFrame):
         layout.addWidget(self.video_container)
         layout.addWidget(controls)
         
-        self.media_player.positionChanged.connect(self.update_position)
         self.is_seeking = False
 
     def eventFilter(self, obj, event):
@@ -230,9 +221,15 @@ class VideoPlayerWidget(QFrame):
         return super().eventFilter(obj, event)
 
     def clear_video(self):
-        """清除當前載入的影片"""
-        self.media_player.stop()
-        self.media_player.setSource(QUrl(""))
+        """清除當前載入的影片並釋放資源"""
+        if self.media_player:
+            self.media_player.stop()
+            self.media_player.setVideoOutput(None)
+            self.media_player.deleteLater()
+            self.audio_output.deleteLater()
+            self.media_player = None
+            self.audio_output = None
+            
         self.video_widget.hide()
         self.info_label.show()
         self.name_label.setText("等待拖曳")
@@ -254,7 +251,16 @@ class VideoPlayerWidget(QFrame):
         self.video_container.setStyleSheet("border: none;")
 
     def load_video(self, path):
-        # 如果已經有影片正在播放，這會自動覆蓋
+        # 延遲初始化媒體播放組件，避免一次開啟過多導致閃退
+        if not self.media_player:
+            self.media_player = QMediaPlayer()
+            self.audio_output = QAudioOutput()
+            self.media_player.setAudioOutput(self.audio_output)
+            self.media_player.setVideoOutput(self.video_widget)
+            self.media_player.positionChanged.connect(self.update_position)
+            # 恢復音量設定
+            self.audio_output.setVolume(self.vol_slider.value() / 100.0)
+
         self.video_path = path
         self.name_label.setText(path.name)
         self.info_label.hide()
@@ -264,7 +270,7 @@ class VideoPlayerWidget(QFrame):
         self.play_btn.setText("||")
 
     def toggle(self):
-        if not self.video_path: return
+        if not self.video_path or not self.media_player: return
         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.media_player.pause()
             self.play_btn.setText("P")
@@ -277,7 +283,7 @@ class VideoPlayerWidget(QFrame):
             self.seek_slider.setValue(int(position * 1000 / self.media_player.duration()))
 
     def set_position(self, position):
-        if self.media_player.duration() > 0:
+        if self.media_player and self.media_player.duration() > 0:
             self.media_player.setPosition(int(position * self.media_player.duration() / 1000))
 
     def on_seek_pressed(self): self.is_seeking = True

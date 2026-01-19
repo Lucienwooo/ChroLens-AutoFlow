@@ -37,7 +37,7 @@ except ImportError:
     AboutDialog = None
     MultiPlayerWindow = None
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 APP_NAME = "AutoFlow"
 FULL_APP_NAME = "ChroLens_AutoFlow"
 GITHUB_REPO = "Lucienwooo/ChroLens_AutoFlow"
@@ -287,6 +287,7 @@ class VideoListItem(QWidget):
         self.is_dark = True
         self.parent_window = parent_window
         self.video_capture = None
+        self.setStyleSheet("VideoListItem { border: none; background: transparent; }")
         self.total_frames = 0
         self.fps = 0
         self.is_playing_inline = False
@@ -309,8 +310,8 @@ class VideoListItem(QWidget):
     def init_ui(self):
         """初始化UI"""
         main_layout = QHBoxLayout()
-        main_layout.setContentsMargins(8, 8, 8, 8)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(4)
         
         # 左側：縮圖和檔名
         left_layout = QVBoxLayout()
@@ -318,13 +319,15 @@ class VideoListItem(QWidget):
         
         # 顯示區域疊加（縮圖 與 播放器）
         self.display_stack = QStackedWidget()
+        self.display_stack.setObjectName("VideoStack")
+        self.display_stack.setStyleSheet("QStackedWidget#VideoStack { background: black; border: none; padding: 0px; }")
         self.display_stack.setFixedSize(320, 180)
         
         # 縮圖
         self.thumbnail_label = QLabel()
         self.thumbnail_label.setFixedSize(320, 180)
         bg_color = "#2C2C2E" if self.is_dark else "#E5E5EA"
-        self.thumbnail_label.setStyleSheet(f"background-color: {bg_color}; border-radius: 6px;")
+        self.thumbnail_label.setStyleSheet(f"background-color: {bg_color}; border-radius: 0px;")
         self.thumbnail_label.setScaledContents(True)
         self.thumbnail_label.setMouseTracking(True)
         self.thumbnail_label.installEventFilter(self)
@@ -332,6 +335,7 @@ class VideoListItem(QWidget):
         # 內嵌播放器
         self.video_widget = QVideoWidget()
         self.video_widget.setFixedSize(320, 180)
+        self.video_widget.setStyleSheet("border: none;")
         self.video_widget.installEventFilter(self) # 增加事件監聽
         self.media_player.setVideoOutput(self.video_widget)
         
@@ -351,7 +355,7 @@ class VideoListItem(QWidget):
                 border: none;
                 height: 4px;
                 background: {bg_color};
-                border-radius: 2px;
+                border-radius: 0px;
             }}
             QSlider::handle:horizontal {{
                 background: {progress_color};
@@ -690,6 +694,14 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.apply_theme()
         
+        # 讀取並載入上次的資料夾
+        last_folder = self.settings.value("last_folder", "")
+        if last_folder and os.path.exists(last_folder):
+            self.selected_folder = last_folder
+            self.folder_path_label.setText(last_folder)
+            # 延遲載入影片清單，確保 UI 已完全初始化
+            QTimer.singleShot(500, self.load_video_list)
+        
         if self.version_manager:
             self.check_updates_async()
     
@@ -782,6 +794,7 @@ class MainWindow(QMainWindow):
         
         # 進度
         self.progress_widget = QFrame()
+        self.progress_widget.setObjectName("ProgressPanel")
         progress_layout = QVBoxLayout()
         progress_layout.setSpacing(4)
         progress_layout.setContentsMargins(0, 0, 0, 0)
@@ -811,6 +824,7 @@ class MainWindow(QMainWindow):
         
         # 日誌
         self.log_widget = QFrame()
+        self.log_widget.setObjectName("LogWidget")
         log_layout = QVBoxLayout()
         log_layout.setSpacing(4)
         log_layout.setContentsMargins(0, 0, 0, 0)
@@ -883,6 +897,7 @@ class MainWindow(QMainWindow):
         
         # 右側面板 - 影片列表
         self.right_panel = QFrame()
+        self.right_panel.setObjectName("RightPanel")
         
         right_layout = QVBoxLayout()
         right_layout.setSpacing(4)
@@ -906,8 +921,8 @@ class MainWindow(QMainWindow):
         
         self.video_grid_widget = QWidget()
         self.video_grid_layout = QGridLayout()
-        self.video_grid_layout.setSpacing(8)
-        self.video_grid_layout.setContentsMargins(4, 4, 4, 4)
+        self.video_grid_layout.setSpacing(2)
+        self.video_grid_layout.setContentsMargins(0, 0, 0, 0)
         self.video_grid_widget.setLayout(self.video_grid_layout)
         
         scroll_area.setWidget(self.video_grid_widget)
@@ -942,7 +957,7 @@ class MainWindow(QMainWindow):
         """)
         
         self.progress_widget.setStyleSheet("""
-            QFrame {
+            QFrame#ProgressPanel {
                 background-color: #2C2C2E;
                 border-radius: 8px;
                 padding: 8px 12px;
@@ -950,7 +965,7 @@ class MainWindow(QMainWindow):
         """)
         
         self.log_widget.setStyleSheet("""
-            QFrame {
+            QFrame#LogWidget {
                 background-color: #2C2C2E;
                 border-radius: 8px;
                 padding: 8px;
@@ -958,7 +973,7 @@ class MainWindow(QMainWindow):
         """)
         
         self.right_panel.setStyleSheet("""
-            QFrame {
+            QFrame#RightPanel {
                 background-color: #2C2C2E;
                 border-radius: 8px;
                 padding: 8px;
@@ -979,14 +994,16 @@ class MainWindow(QMainWindow):
         
         self.progress_bar.setStyleSheet("""
             QProgressBar {
-                border: none;
-                background-color: #3A3A3C;
-                border-radius: 3px;
+                border: 1px solid #3A3A3C;
+                background-color: #1C1C1E;
+                border-radius: 4px;
                 text-align: center;
+                height: 8px;
             }
             QProgressBar::chunk {
                 background-color: #007AFF;
-                border-radius: 3px;
+                border-radius: 2px;
+                margin: 0px;
             }
         """)
     
@@ -1030,6 +1047,7 @@ class MainWindow(QMainWindow):
         if folder:
             self.selected_folder = folder
             self.folder_path_label.setText(folder)
+            self.settings.setValue("last_folder", folder)
             self.add_log(f"已選擇資料夾: {folder}")
             self.load_video_list()
     
@@ -1063,10 +1081,10 @@ class MainWindow(QMainWindow):
         
         # 以兩欄方式添加影片，並更新進度
         for index, file_path in enumerate(files_to_load):
-            # 更新進度條
-            percent = int((index + 1) / load_count * 1000) # 使用 0-1000 的範圍
+            # 更新進度條 (標準化為 0-100)
+            percent = int((index + 1) / load_count * 100)
             self.progress_bar.setValue(percent)
-            self.progress_percent.setText(f"{int(percent/10)}%")
+            self.progress_percent.setText(f"{percent}%")
             self.current_file_label.setText(f"載入中 ({index+1}/{load_count}): {file_path.name}")
             
             # 強制 UI 更新，防止假死
@@ -1164,8 +1182,8 @@ class MainWindow(QMainWindow):
             return
         
         if MultiPlayerWindow:
-            player = MultiPlayerWindow(files, self)
-            player.show()
+            self.player_window = MultiPlayerWindow(files, self)
+            self.player_window.show()
             self.add_log(f"已開啟多視窗播放器，共 {len(files)} 個影片")
         else:
             QMessageBox.warning(self, "錯誤", "無法載入多視窗播放器模組!")

@@ -16,6 +16,11 @@ from PyQt6.QtGui import QFont, QColor, QIcon
 
 class VersionInfoDialog(QDialog):
     """合併 Mimic 風格的版本資訊與更新對話框"""
+    check_finished = pyqtSignal(object)
+    update_state_signal = pyqtSignal(str, int)
+    update_progress_signal = pyqtSignal(int, str)
+    update_error = pyqtSignal(str)
+    update_success = pyqtSignal()
     
     def __init__(self, parent, version_manager, current_version, app_name="ChroLens_AutoFlow"):
         super().__init__(parent)
@@ -23,6 +28,13 @@ class VersionInfoDialog(QDialog):
         self.current_version = current_version
         self.app_name = app_name
         self.update_info = None
+        
+        # 連接信號
+        self.check_finished.connect(self._handle_check_result)
+        self.update_state_signal.connect(self._update_ui_state)
+        self.update_progress_signal.connect(self._update_prog_bar)
+        self.update_error.connect(self._show_error)
+        self.update_success.connect(self._show_success_msg)
         
         self.setWindowTitle(f"版本資訊 - {app_name}")
         self.setMinimumSize(550, 650)
@@ -234,8 +246,7 @@ class VersionInfoDialog(QDialog):
 
     def _check_task(self):
         info = self.vm.check_for_updates()
-        QMetaObject.invokeMethod(self, "_handle_check_result", Qt.ConnectionType.QueuedConnection, 
-                                Q_ARG(object, info))
+        self.check_finished.emit(info)
 
     def _handle_check_result(self, info):
         if info:
@@ -271,36 +282,32 @@ class VersionInfoDialog(QDialog):
             if not zip_path: raise Exception("下載失敗")
             
             # 2. 解壓
-            QMetaObject.invokeMethod(self, "_update_ui_state", Qt.ConnectionType.QueuedConnection, 
-                                    Q_ARG(str, "階段 2/3: 解壓縮檔案"), Q_ARG(int, 70))
+            self.update_state_signal.emit("階段 2/3: 解壓縮檔案", 70)
             extract_dir = self.vm.extract_update(zip_path)
             if not extract_dir: raise Exception("解壓縮失敗")
             
             # 3. 準備套用 (Robocopy 腳本)
-            QMetaObject.invokeMethod(self, "_update_ui_state", Qt.ConnectionType.QueuedConnection, 
-                                    Q_ARG(str, "階段 3/3: 安裝更新"), Q_ARG(int, 90))
+            self.update_state_signal.emit("階段 3/3: 安裝更新", 90)
             time.sleep(1)
             
             # 執行腳本
             success = self.vm.apply_update(extract_dir, restart_after=True)
             if success:
-                QMetaObject.invokeMethod(self, "_update_ui_state", Qt.ConnectionType.QueuedConnection, 
-                                        Q_ARG(str, "✓ 更新完成！"), Q_ARG(int, 100))
+                self.update_state_signal.emit("✓ 更新完成！", 100)
                 # 提示重啟
-                QMetaObject.invokeMethod(self, "_show_success_msg", Qt.ConnectionType.QueuedConnection)
+                self.update_success.emit()
             else:
                 raise Exception("套用更新腳本失敗")
                 
         except Exception as e:
-            QMetaObject.invokeMethod(self, "_show_error", Qt.ConnectionType.QueuedConnection, Q_ARG(str, str(e)))
+            self.update_error.emit(str(e))
 
     def _update_progress(self, current, total):
         """下載進度回調"""
         if total > 0:
             percent = int((current / total) * 60) # 下載佔 60%
             detail = f"{current/(1024*1024):.1f}MB / {total/(1024*1024):.1f}MB"
-            QMetaObject.invokeMethod(self, "_update_prog_bar", Qt.ConnectionType.QueuedConnection,
-                                    Q_ARG(int, percent), Q_ARG(str, detail))
+            self.update_progress_signal.emit(percent, detail)
 
     def _update_prog_bar(self, val, detail):
         self.prog_bar.setValue(val)
