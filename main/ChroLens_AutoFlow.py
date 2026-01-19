@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                               QListWidget, QListWidgetItem, QSplitter, QDialog,
                               QCheckBox, QMessageBox, QInputDialog, QGridLayout, QSlider, QStackedWidget)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QSettings, QPoint, QTimer, QUrl
-from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QImage, QIcon, QCursor
+from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QImage, QIcon, QCursor, QFontDatabase
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 import requests
@@ -281,10 +281,10 @@ class VideoListItem(QWidget):
     deleted = pyqtSignal(object)
     renamed = pyqtSignal(object)
     
-    def __init__(self, video_path, is_dark=False, parent_window=None):
+    def __init__(self, video_path, parent_window=None):
         super().__init__()
         self.video_path = video_path
-        self.is_dark = is_dark
+        self.is_dark = True
         self.parent_window = parent_window
         self.video_capture = None
         self.total_frames = 0
@@ -386,17 +386,17 @@ class VideoListItem(QWidget):
         button_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         button_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.play_btn = QPushButton("▶️ 播放")
+        self.play_btn = QPushButton("播放")
         self.play_btn.setFixedSize(60, 32)
         self.play_btn.setStyleSheet(self.get_button_style("#34C759"))
         self.play_btn.clicked.connect(self.toggle_inline_playback)
         
-        self.rename_btn = QPushButton("✏️ 更名")
+        self.rename_btn = QPushButton("更名")
         self.rename_btn.setFixedSize(60, 32)
         self.rename_btn.setStyleSheet(self.get_button_style("#007AFF"))
         self.rename_btn.clicked.connect(self.rename_video)
         
-        self.delete_btn = QPushButton("🗑️ 刪除")
+        self.delete_btn = QPushButton("刪除")
         self.delete_btn.setFixedSize(60, 32)
         self.delete_btn.setStyleSheet(self.get_button_style("#FF3B30"))
         self.delete_btn.clicked.connect(self.delete_video)
@@ -570,7 +570,7 @@ class VideoListItem(QWidget):
             self.is_playing_inline = True
             
             # 更新按鈕樣式
-            self.play_btn.setText("⏸️ 暫停")
+            self.play_btn.setText("暫停")
             self.play_btn.setStyleSheet(self.get_button_style("#FF9500"))
         else:
             # 切換 暫停/播放
@@ -680,7 +680,7 @@ class MainWindow(QMainWindow):
         self.selected_folder = ""
         
         self.settings = QSettings("Lucien", APP_NAME)
-        self.is_dark = self.settings.value("dark_mode", True, type=bool)
+        self.is_dark = True # 鎖定為深色模式
         
         if VersionManager:
             self.version_manager = VersionManager(GITHUB_REPO, VERSION, logger=self.add_log)
@@ -727,7 +727,7 @@ class MainWindow(QMainWindow):
     
     def init_ui(self):
         """初始化UI"""
-        self.setWindowTitle(f"🎬 {APP_NAME} v{VERSION}")
+        self.setWindowTitle(f"{APP_NAME} v{VERSION}")
         self.setMinimumSize(1000, 650)
         self.resize(1400, 750)
         
@@ -753,16 +753,12 @@ class MainWindow(QMainWindow):
         header_layout.setSpacing(2)
         
         title_row = QHBoxLayout()
-        title = QLabel(f"🎬 {APP_NAME}")
+        title = QLabel(f"{APP_NAME}")
         title.setStyleSheet("font-size: 18px; font-weight: bold;")
         title_row.addWidget(title)
         title_row.addStretch()
         
-        self.theme_toggle = QCheckBox("🌙 深色模式")
-        self.theme_toggle.setChecked(self.is_dark)
-        self.theme_toggle.setStyleSheet("font-size: 10px;")
-        self.theme_toggle.stateChanged.connect(self.toggle_theme)
-        title_row.addWidget(self.theme_toggle)
+        # 已移除主題切換開關
         
         subtitle = QLabel(f"智能影片自動分類工具 v{VERSION}")
         subtitle.setStyleSheet("font-size: 10px;")
@@ -774,10 +770,10 @@ class MainWindow(QMainWindow):
         stats_layout = QHBoxLayout()
         stats_layout.setSpacing(6)
         
-        self.total_card = StatCard("總檔案數", "#007AFF", self.is_dark)
-        self.processed_card = StatCard("已處理", "#34C759", self.is_dark)
-        self.skipped_card = StatCard("已跳過", "#FF9500", self.is_dark)
-        self.failed_card = StatCard("失敗", "#FF3B30", self.is_dark)
+        self.total_card = StatCard("總檔案數", "#007AFF", True)
+        self.processed_card = StatCard("已處理", "#34C759", True)
+        self.skipped_card = StatCard("已跳過", "#FF9500", True)
+        self.failed_card = StatCard("失敗", "#FF3B30", True)
         
         stats_layout.addWidget(self.total_card)
         stats_layout.addWidget(self.processed_card)
@@ -834,7 +830,7 @@ class MainWindow(QMainWindow):
         control_layout.setSpacing(8)
         
         folder_layout = QHBoxLayout()
-        folder_label = QLabel("📁 選擇資料夾")
+        folder_label = QLabel("選擇資料夾")
         folder_label.setStyleSheet("font-size: 11px; font-weight: 600;")
         
         self.select_folder_btn = QPushButton("瀏覽...")
@@ -852,20 +848,20 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(6)
         
-        self.start_btn = QPushButton("▶️ 開始")
+        self.start_btn = QPushButton("開始")
         self.start_btn.setFixedHeight(32)
         self.start_btn.clicked.connect(self.start_processing)
         
-        self.stop_btn = QPushButton("⏸️ 停止")
+        self.stop_btn = QPushButton("停止")
         self.stop_btn.setFixedHeight(32)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop_processing)
         
-        self.player_btn = QPushButton("📺 多窗瀏覽")
+        self.player_btn = QPushButton("多窗瀏覽")
         self.player_btn.setFixedHeight(32)
         self.player_btn.clicked.connect(self.show_multi_player)
         
-        self.about_btn = QPushButton("ℹ️ 關於")
+        self.about_btn = QPushButton("關於")
         self.about_btn.setFixedHeight(32)
         self.about_btn.clicked.connect(self.show_about)
         
@@ -931,136 +927,70 @@ class MainWindow(QMainWindow):
     def create_icon(self):
         """創建圖標"""
         try:
-            import sys
-            if getattr(sys, 'frozen', False):
-                icon_path = os.path.join(sys._MEIPASS, "icon.ico")
-            else:
-                icon_path = "icon.ico"
-            
+            icon_path = os.path.join(os.path.dirname(__file__), "pic", "umi_粉紅色.ico")
             if os.path.exists(icon_path):
                 self.setWindowIcon(QIcon(icon_path))
         except:
             pass
     
     def apply_theme(self):
-        """應用主題"""
-        if self.is_dark:
-            self.setStyleSheet("""
-                QMainWindow { background-color: #1C1C1E; }
-                QWidget { color: #E5E5EA; }
-                QLabel { color: #E5E5EA; }
-                QCheckBox { color: #E5E5EA; }
-            """)
-            
-            self.progress_widget.setStyleSheet("""
-                QFrame {
-                    background-color: #2C2C2E;
-                    border-radius: 8px;
-                    padding: 8px 12px;
-                }
-            """)
-            
-            self.log_widget.setStyleSheet("""
-                QFrame {
-                    background-color: #2C2C2E;
-                    border-radius: 8px;
-                    padding: 8px;
-                }
-            """)
-            
-            self.right_panel.setStyleSheet("""
-                QFrame {
-                    background-color: #2C2C2E;
-                    border-radius: 8px;
-                    padding: 8px;
-                }
-            """)
-            
-            self.log_text.setStyleSheet("""
-                QTextEdit {
-                    background-color: #1C1C1E;
-                    color: #E5E5EA;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 6px;
-                    font-family: Consolas;
-                    font-size: 9px;
-                }
-            """)
-            
-            self.progress_bar.setStyleSheet("""
-                QProgressBar {
-                    border: none;
-                    background-color: #3A3A3C;
-                    border-radius: 3px;
-                    text-align: center;
-                }
-                QProgressBar::chunk {
-                    background-color: #007AFF;
-                    border-radius: 3px;
-                }
-            """)
-        else:
-            self.setStyleSheet("QMainWindow { background-color: #F5F5F7; }")
-            
-            self.progress_widget.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border-radius: 8px;
-                    padding: 8px 12px;
-                }
-            """)
-            
-            self.log_widget.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border-radius: 8px;
-                    padding: 8px;
-                }
-            """)
-            
-            self.right_panel.setStyleSheet("""
-                QFrame {
-                    background-color: white;
-                    border-radius: 8px;
-                    padding: 8px;
-                }
-            """)
-            
-            self.log_text.setStyleSheet("""
-                QTextEdit {
-                    background-color: #F5F5F7;
-                    color: #3A3A3C;
-                    border: none;
-                    border-radius: 4px;
-                    padding: 6px;
-                    font-family: Consolas;
-                    font-size: 9px;
-                }
-            """)
-            
-            self.progress_bar.setStyleSheet("""
-                QProgressBar {
-                    border: none;
-                    background-color: #E5E5EA;
-                    border-radius: 3px;
-                    text-align: center;
-                }
-                QProgressBar::chunk {
-                    background-color: #007AFF;
-                    border-radius: 3px;
-                }
-            """)
-    
-    def toggle_theme(self):
-        """切換主題"""
-        self.is_dark = self.theme_toggle.isChecked()
-        self.settings.setValue("dark_mode", self.is_dark)
-        self.apply_theme()
+        """應用主題 (鎖定深色)"""
+        self.setStyleSheet("""
+            QMainWindow { background-color: #1C1C1E; }
+            QWidget { color: #E5E5EA; }
+            QLabel { color: #E5E5EA; }
+        """)
         
-        # 重新載入影片列表以應用新主題
-        if self.selected_folder:
-            self.load_video_list()
+        self.progress_widget.setStyleSheet("""
+            QFrame {
+                background-color: #2C2C2E;
+                border-radius: 8px;
+                padding: 8px 12px;
+            }
+        """)
+        
+        self.log_widget.setStyleSheet("""
+            QFrame {
+                background-color: #2C2C2E;
+                border-radius: 8px;
+                padding: 8px;
+            }
+        """)
+        
+        self.right_panel.setStyleSheet("""
+            QFrame {
+                background-color: #2C2C2E;
+                border-radius: 8px;
+                padding: 8px;
+            }
+        """)
+        
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1C1C1E;
+                color: #E5E5EA;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+                font-family: 'LINESeedTW_TTF_Rg', Consolas;
+                font-size: 10px;
+            }
+        """)
+        
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                background-color: #3A3A3C;
+                border-radius: 3px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #007AFF;
+                border-radius: 3px;
+            }
+        """)
+    
+    # 已移除主題切換方法
     
     def add_log(self, message):
         """添加日誌"""
@@ -1142,7 +1072,7 @@ class MainWindow(QMainWindow):
             # 強制 UI 更新，防止假死
             QApplication.processEvents()
             
-            widget = VideoListItem(file_path, self.is_dark, self)
+            widget = VideoListItem(file_path, self)
             widget.deleted.connect(lambda w=widget: self.on_video_deleted_grid(w))
             widget.renamed.connect(lambda w=widget: self.on_video_renamed(w))
             
@@ -1234,7 +1164,7 @@ class MainWindow(QMainWindow):
             return
         
         if MultiPlayerWindow:
-            player = MultiPlayerWindow(files, self.is_dark, self)
+            player = MultiPlayerWindow(files, self)
             player.show()
             self.add_log(f"已開啟多視窗播放器，共 {len(files)} 個影片")
         else:
@@ -1260,8 +1190,21 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     
-    font = QFont("Segoe UI", 9)
-    app.setFont(font)
+    # 載入自定義字體
+    font_path = os.path.join(os.path.dirname(__file__), "TTF", "LINESeedTW_TTF_Rg.ttf")
+    if os.path.exists(font_path):
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        if font_id != -1:
+            families = QFontDatabase.applicationFontFamilies(font_id)
+            if families:
+                font_family = families[0]
+                app.setFont(QFont(font_family, 10))
+            else:
+                app.setFont(QFont("LINESeedTW_TTF_Rg", 10))
+        else:
+            app.setFont(QFont("微软雅黑", 10))
+    else:
+        app.setFont(QFont("微软雅黑", 10))
     
     window = MainWindow()
     window.show()

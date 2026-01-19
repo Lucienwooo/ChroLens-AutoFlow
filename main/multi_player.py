@@ -60,15 +60,23 @@ class DraggableListWidget(QListWidget):
             drag.exec(supportedActions)
 
 class MultiPlayerWindow(QDialog):
-    def __init__(self, video_files, is_dark=True, parent=None):
+    def __init__(self, video_files, parent=None):
         super().__init__(parent)
         self.video_files = video_files
-        self.is_dark = is_dark
         self.player_widgets = []
         self.init_ui()
+        
+        # 設置圖示
+        try:
+            from PyQt6.QtGui import QIcon
+            icon_path = os.path.join(os.path.dirname(__file__), "pic", "umi_粉紅色.ico")
+            if os.path.exists(icon_path):
+                self.setWindowIcon(QIcon(icon_path))
+        except:
+            pass
     
     def init_ui(self):
-        self.setWindowTitle("🎬 多視窗播放器 (9宮格)")
+        self.setWindowTitle("多視窗播放器 (9宮格)")
         self.resize(1800, 950)
         
         main_layout = QHBoxLayout()
@@ -81,16 +89,16 @@ class MultiPlayerWindow(QDialog):
         left_layout.setContentsMargins(0, 0, 0, 0)
         
         list_label = QLabel("影片列表 (拖曳至右側)")
-        list_label.setStyleSheet(f"font-size: 13px; font-weight: bold; color: {'white' if self.is_dark else 'black'};")
+        list_label.setStyleSheet("font-size: 13px; font-weight: bold; color: white;")
         
         self.video_list = DraggableListWidget()
         self.video_list.setDragEnabled(True)
-        self.video_list.setStyleSheet(f"""
-            QListWidget {{
-                background-color: {'#2C2C2E' if self.is_dark else '#F0F0F0'};
+        self.video_list.setStyleSheet("""
+            QListWidget {
+                background-color: #2C2C2E;
                 border-radius: 6px;
-                color: {'white' if self.is_dark else 'black'};
-            }}
+                color: white;
+            }
         """)
         
         for video_file in self.video_files:
@@ -109,7 +117,7 @@ class MultiPlayerWindow(QDialog):
         grid_layout.setSpacing(6)
         
         for i in range(9):
-            player_widget = VideoPlayerWidget(i, self.is_dark)
+            player_widget = VideoPlayerWidget(i)
             player_widget.video_dropped.connect(self.on_video_dropped)
             grid_layout.addWidget(player_widget, i // 3, i % 3)
             self.player_widgets.append(player_widget)
@@ -134,10 +142,9 @@ class MultiPlayerWindow(QDialog):
 class VideoPlayerWidget(QFrame):
     video_dropped = pyqtSignal(int, str)
     
-    def __init__(self, index, is_dark=True):
+    def __init__(self, index):
         super().__init__()
         self.index = index
-        self.is_dark = is_dark
         self.video_path = None
         self.setFixedSize(540, 380) 
         self.setAcceptDrops(True)
@@ -175,7 +182,7 @@ class VideoPlayerWidget(QFrame):
         c_layout.setContentsMargins(8, 0, 8, 0)
         c_layout.setSpacing(10)
         
-        self.play_btn = QPushButton("▶️")
+        self.play_btn = QPushButton("P")
         self.play_btn.setFixedSize(30, 30)
         self.play_btn.clicked.connect(self.toggle)
         
@@ -229,7 +236,7 @@ class VideoPlayerWidget(QFrame):
         self.video_widget.hide()
         self.info_label.show()
         self.name_label.setText("等待拖曳")
-        self.play_btn.setText("▶️")
+        self.play_btn.setText("P")
         self.video_path = None
         self.seek_slider.setValue(0)
 
@@ -254,16 +261,16 @@ class VideoPlayerWidget(QFrame):
         self.video_widget.show()
         self.media_player.setSource(QUrl.fromLocalFile(str(path)))
         self.media_player.play()
-        self.play_btn.setText("⏸️")
+        self.play_btn.setText("||")
 
     def toggle(self):
         if not self.video_path: return
         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.media_player.pause()
-            self.play_btn.setText("▶️")
+            self.play_btn.setText("P")
         else:
             self.media_player.play()
-            self.play_btn.setText("⏸️")
+            self.play_btn.setText("||")
 
     def update_position(self, position):
         if not self.is_seeking and self.media_player.duration() > 0:
