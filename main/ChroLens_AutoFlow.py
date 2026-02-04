@@ -50,15 +50,20 @@ class VideoProcessor(QThread):
     current_file_update = pyqtSignal(str)
     finished = pyqtSignal()
     
-    def __init__(self, folder_path, cache):
+    def __init__(self, folder_path, cache, include_subfolders=False):
         super().__init__()
         self.folder_path = folder_path
         self.cache = cache
+        self.include_subfolders = include_subfolders
         self.is_running = True
     
     def run(self):
         """執行影片處理"""
-        files = list(Path(self.folder_path).glob("*.mp4"))
+        # 根據是否包含子資料夾來搜尋檔案
+        if self.include_subfolders:
+            files = list(Path(self.folder_path).rglob("*.mp4"))
+        else:
+            files = list(Path(self.folder_path).glob("*.mp4"))
         total = len(files)
         processed = 0
         skipped = 0
@@ -87,23 +92,36 @@ class VideoProcessor(QThread):
             self.log_update.emit(f"[{i+1}/{total}] {file_path.name}")
             self.log_update.emit(f"  番號: {code}")
             
+            # 檢查快取，但只接受女優名稱（非廠商代碼）
+            actress = None
             if code in self.cache:
-                actress = self.cache[code]
-                self.log_update.emit(f"  [快取] {actress}")
+                cached_value = self.cache[code]
+                # 檢查是否為廠商代碼（通常是全大寫的短代碼）
+                if cached_value and len(cached_value) <= 10 and cached_value.isupper():
+                    # 這可能是廠商代碼，重新搜尋
+                    self.log_update.emit(f"  [快取無效] {cached_value} (廠商代碼)")
+                    actress = self.search_actress(code)
+                    if actress and actress not in ["UNKNOWN", "MULTIPLE"]:
+                        self.cache[code] = actress
+                else:
+                    actress = cached_value
+                    self.log_update.emit(f"  [快取] {actress}")
             else:
                 actress = self.search_actress(code)
-                if actress:
+                if actress and actress not in ["UNKNOWN", "MULTIPLE"]:
                     self.cache[code] = actress
-                else:
-                    self.log_update.emit(f"  [失敗] 搜尋失敗")
-                    failed += 1
-                    self.progress_update.emit(total, processed, skipped, failed)
-                    continue
-                
-                time.sleep(2)
             
-            if actress in ["UNKNOWN", "MULTIPLE"]:
-                self.log_update.emit(f"  [跳過] {actress}")
+            # 如果沒有找到女優名稱，跳過
+            if not actress or actress in ["UNKNOWN", "MULTIPLE"]:
+                self.log_update.emit(f"  [跳過] 未找到女優名稱")
+                skipped += 1
+                self.progress_update.emit(total, processed, skipped, failed)
+                continue
+            
+            # 檢查檔案是否已經在正確的資料夾中
+            current_folder = file_path.parent.name
+            if current_folder == actress:
+                self.log_update.emit(f"  [已分類] 檔案已在 {actress} 資料夾中")
                 skipped += 1
                 self.progress_update.emit(total, processed, skipped, failed)
                 continue
@@ -118,6 +136,8 @@ class VideoProcessor(QThread):
             
             if (i + 1) % 5 == 0:
                 self.save_cache()
+            
+            time.sleep(1)  # 避免請求過快
         
         self.save_cache()
         self.log_update.emit("=== 處理完成 ===")
@@ -184,25 +204,34 @@ class VideoProcessor(QThread):
     def extract_video_code(self, filename):
         """提取影片番號"""
         name = Path(filename).stem
+        
+        # 移除常見前綴
         name = re.sub(r'^(A-)?MOSAIC-ARCHIVE-', '', name, flags=re.IGNORECASE)
         name = re.sub(r'^ARCHIVE-MOSAIC-', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'^ARCHIVE-', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'^MOSAIC-', '', name, flags=re.IGNORECASE)
         
+        # 搜尋模式（按優先順序）
+        # 使用 \b 確保匹配完整的單詞
         patterns = [
-            r'([A-Z]+-\d+)',
-            r'([A-Z]+\d+)',
-            r'(FC2-PPV-\d+)',
-            r'(FC2-\d+)',
+            r'\bFC2-?PPV-?\d+\b',        # FC2PPV-3119569 或 FC2-PPV-3119569
+            r'\b[A-Z]{2,}-\d{2,4}\b',    # EBWH-179, STARS-947, ABF-259 (2-4位數字)
+            r'\b[A-Z]+\d{3,}\b',         # MD0226 (至少3位數字)
         ]
         
         for pattern in patterns:
             match = re.search(pattern, name, re.IGNORECASE)
             if match:
-                return match.group(1).upper()
+                code = match.group(0).upper()
+                # 統一 FC2 格式
+                if 'FC2' in code:
+                    code = re.sub(r'FC2-?PPV-?', 'FC2-PPV-', code, flags=re.IGNORECASE)
+                return code
         
         return None
     
     def search_actress(self, code):
-        """搜尋女優名稱"""
+        """搜尋女優名稱 - 使用 JavBus (已驗證有效)"""
         # 檢查是否為FC2影片
         if code.upper().startswith('FC2'):
             self.log_update.emit(f"  [FC2] 分類到FC2資料夾")
@@ -210,25 +239,103 @@ class VideoProcessor(QThread):
         
         self.log_update.emit(f"  搜尋中...")
         
+        # 使用 JavBus 搜尋女優名稱
+        actress = self._search_javbus(code)
+        if actress:
+            return actress
+        
+        # 沒有找到女優名稱
+        self.log_update.emit(f"  [未找到] 無法取得女優資訊")
+        return None
+    
+    def _search_javbus(self, code):
+        """使用 JavBus 搜尋女優 (已驗證有效)"""
         try:
-            url = f"https://av-wiki.net/{code}"
-            response = requests.get(url, timeout=10)
+            url = f"https://www.javbus.com/{code}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept-Language': 'zh-TW,zh;q=0.9'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15)
             
             if response.status_code == 200:
-                content = response.text
+                # 移除 HTML 標籤
+                def remove_html_tags(text):
+                    clean = re.sub(r'<[^>]+>', '', text)
+                    return clean.strip()
                 
-                # 簡單的女優名稱提取邏輯
-                actress_match = re.search(r'<title>(.+?)</title>', content)
-                if actress_match:
-                    actress_name = actress_match.group(1).split('-')[0].strip()
+                # 查找演員區塊
+                star_pattern = r'<div class="star-name">(.+?)</div>'
+                star_matches = re.findall(star_pattern, response.text, re.DOTALL)
+                
+                if star_matches:
+                    actress_name = remove_html_tags(star_matches[0])
+                    self.log_update.emit(f"  [找到] {actress_name}")
+                    return actress_name
+                
+                # 備用方法：查找 genre 標籤
+                actress_pattern = r'<span class="genre">.*?<a.*?>(.+?)</a>'
+                matches = re.findall(actress_pattern, response.text, re.DOTALL)
+                
+                if matches:
+                    actress_name = remove_html_tags(matches[0])
                     self.log_update.emit(f"  [找到] {actress_name}")
                     return actress_name
             
-            return "UNKNOWN"
+            self.log_update.emit(f"  [JavBus] 未找到資料")
+            return None
             
         except Exception as e:
-            self.log_update.emit(f"  [錯誤] {str(e)}")
+            self.log_update.emit(f"  [JavBus錯誤] {str(e)[:30]}")
             return None
+    
+    def _get_studio_from_code(self, code):
+        """從番號推斷廠商"""
+        # 常見廠商對應表
+        studio_map = {
+            'STARS': 'SOD',
+            'SSIS': 'S1',
+            'SSNI': 'S1',
+            'EBOD': 'E-BODY',
+            'PPPD': 'OPPAI',
+            'ABP': 'Prestige',
+            'ABF': 'Prestige',
+            'MIDE': 'MOODYZ',
+            'MIDV': 'MOODYZ',
+            'IPX': 'IdeaPocket',
+            'IPZZ': 'IdeaPocket',
+            'PRED': 'Premium',
+            'ADN': 'Attackers',
+            'ATID': 'Attackers',
+            'RBD': 'Attackers',
+            'SSPD': 'Attackers',
+            'JUL': 'Madonna',
+            'JUQ': 'Madonna',
+            'JUY': 'Madonna',
+            'MEYD': 'TameikGoro',
+            'WAAA': 'Wanz',
+            'WANZ': 'Wanz',
+            'CAWD': 'Kawaii',
+            'KAWD': 'Kawaii',
+            'FSDSS': 'Faleno',
+            'DASS': 'DAS',
+            'DLDSS': 'DAHLIA',
+            'HUNTB': 'Hunter',
+            'HUNTA': 'Hunter',
+            'DVAJ': 'Alice Japan',
+            'GG': 'Muku',
+            'MD': 'Madou Media',
+        }
+        
+        # 提取番號前綴
+        prefix = re.match(r'([A-Z]+)', code)
+        if prefix:
+            prefix_str = prefix.group(1)
+            if prefix_str in studio_map:
+                return studio_map[prefix_str]
+        
+        return None
     
     def move_video_file(self, file_path, actress_name):
         """移動影片檔案"""
@@ -884,9 +991,15 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.player_btn)
         button_layout.addWidget(self.about_btn)
         
+        # 包含子資料夾開關
+        self.include_subfolders_checkbox = QCheckBox("包含子資料夾")
+        self.include_subfolders_checkbox.setStyleSheet("font-size: 11px;")
+        self.include_subfolders_checkbox.stateChanged.connect(self.on_subfolder_toggle)
+        
         control_layout.addLayout(folder_layout)
         control_layout.addWidget(self.folder_path_label)
         control_layout.addLayout(button_layout)
+        control_layout.addWidget(self.include_subfolders_checkbox)
         
         left_layout.addLayout(header_layout)
         left_layout.addLayout(stats_layout)
@@ -1037,7 +1150,10 @@ class MainWindow(QMainWindow):
             try:
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     self.cache = json.load(f)
-                    self.cache = {k: v for k, v in self.cache.items() if v != "如果系統沒有"}
+                    # 過濾掉無效的快取條目
+                    self.cache = {k: v for k, v in self.cache.items() 
+                                 if v not in ["如果系統沒有", "UNKNOWN", "MULTIPLE"]}
+                print(f"已載入快取: {len(self.cache)} 個條目")
             except Exception as e:
                 print(f"快取載入失敗: {e}")
     
@@ -1049,6 +1165,13 @@ class MainWindow(QMainWindow):
             self.folder_path_label.setText(folder)
             self.settings.setValue("last_folder", folder)
             self.add_log(f"已選擇資料夾: {folder}")
+            self.load_video_list()
+    
+    def on_subfolder_toggle(self):
+        """處理包含子資料夾開關切換"""
+        if self.selected_folder:
+            state = "啟用" if self.include_subfolders_checkbox.isChecked() else "停用"
+            self.add_log(f"包含子資料夾: {state}")
             self.load_video_list()
     
     def load_video_list(self):
@@ -1063,7 +1186,11 @@ class MainWindow(QMainWindow):
         self.progress_percent.setText("0%")
         QApplication.processEvents()
 
-        files = list(Path(self.selected_folder).glob("*.mp4"))
+        # 根據是否包含子資料夾來搜尋檔案
+        if self.include_subfolders_checkbox.isChecked():
+            files = list(Path(self.selected_folder).rglob("*.mp4"))
+        else:
+            files = list(Path(self.selected_folder).glob("*.mp4"))
         total_files = len(files)
         self.total_card.set_value(total_files)
         self.add_log(f"找到 {total_files} 個影片檔案碼，正在產生預覽...")
@@ -1122,7 +1249,8 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         
-        self.processor = VideoProcessor(self.selected_folder, self.cache)
+        include_subfolders = self.include_subfolders_checkbox.isChecked()
+        self.processor = VideoProcessor(self.selected_folder, self.cache, include_subfolders)
         self.processor.progress_update.connect(self.update_progress)
         self.processor.log_update.connect(self.add_log)
         self.processor.current_file_update.connect(self.update_current_file)
