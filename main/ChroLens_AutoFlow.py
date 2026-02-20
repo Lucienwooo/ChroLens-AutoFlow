@@ -33,10 +33,12 @@ try:
     from version_info_dialog import VersionInfoDialog
     from about import AboutDialog
     from multi_player import MultiPlayerWindow
+    from link_search_tool import LinkSearchDialog
 except ImportError:
     VersionManager = None
     AboutDialog = None
     MultiPlayerWindow = None
+    LinkSearchDialog = None
 
 VERSION = "1.2.0"
 APP_NAME = "AutoFlow"
@@ -885,6 +887,30 @@ class MainWindow(QMainWindow):
         title = QLabel(f"{APP_NAME}")
         title.setStyleSheet("font-size: 18px; font-weight: bold;")
         title_row.addWidget(title)
+        
+        # 新增瀏覽器/連結搜尋按鈕
+        self.browser_btn = QPushButton(" 瀏覽器") # 前面加空格微調間距
+        self.browser_btn.setIcon(QIcon(os.path.join(os.path.dirname(__file__), "pic", "umi_粉紅色.ico"))) # 嘗試使用現有圖示，若無則只顯示文字
+        self.browser_btn.setFixedSize(80, 26)
+        # 設定按鈕樣式，使其突出
+        self.browser_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3A3A3C;
+                color: #FF9500;
+                border: 1px solid #FF9500;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #FF9500;
+                color: #1C1C1E;
+            }
+        """)
+        self.browser_btn.clicked.connect(self.show_link_search)
+        
+        title_row.addSpacing(10) # 標題與按鈕間距
+        title_row.addWidget(self.browser_btn)
         title_row.addStretch()
         
         # 已移除主題切換開關
@@ -1366,6 +1392,14 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "錯誤", "無法載入多視窗播放器模組!")
     
+    def show_link_search(self):
+        """顯示連結搜尋工具"""
+        if LinkSearchDialog:
+            dialog = LinkSearchDialog(self)
+            dialog.exec()
+        else:
+            QMessageBox.warning(self, "錯誤", "無法載入連結搜尋模組!")
+
     def show_about(self):
         """顯示關於"""
         if VersionInfoDialog and self.version_manager:
