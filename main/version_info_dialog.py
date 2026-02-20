@@ -261,7 +261,17 @@ class VersionInfoDialog(QDialog):
             self.new_val.setText(f"v{self.current_version}")
             self.stat_val.setText("目前已是最新版本")
             self.stat_val.setStyleSheet("color: #8E8E93;")
-            self.notes_text.setPlainText("您目前使用的是最新版本。\n無需進行任何更新項目。")
+            
+            # v1.2.0 更新說明
+            release_notes = (
+                "【v1.2.0 更新內容】\n"
+                "1. 介面優化: 影片列表移除捲軸，改為自適應佈局\n"
+                "2. 新增功能: 多窗瀏覽改版，支援 9 宮格與拖曳調整視窗比例\n"
+                "3. 修正: 縮圖與影片尺寸比例問題，支援直式影片不變形\n"
+                "4. 修正: 深色模式下按鈕文字清晰度問題\n"
+                "5. 修正: 多窗瀏覽與主介面主題統一"
+            )
+            self.notes_text.setPlainText(release_notes)
 
     def start_update_process(self):
         """開始更新流程"""

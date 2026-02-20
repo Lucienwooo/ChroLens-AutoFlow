@@ -17,7 +17,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                               QHBoxLayout, QPushButton, QLabel, QTextEdit, 
                               QProgressBar, QFileDialog, QFrame, QScrollArea,
                               QListWidget, QListWidgetItem, QSplitter, QDialog,
-                              QCheckBox, QMessageBox, QInputDialog, QGridLayout, QSlider, QStackedWidget)
+                              QCheckBox, QMessageBox, QInputDialog, QGridLayout, QSlider, QStackedWidget,
+                              QSizePolicy)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QSettings, QPoint, QTimer, QUrl
 from PyQt6.QtGui import QFont, QColor, QPalette, QPixmap, QImage, QIcon, QCursor, QFontDatabase
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -37,7 +38,7 @@ except ImportError:
     AboutDialog = None
     MultiPlayerWindow = None
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 APP_NAME = "AutoFlow"
 FULL_APP_NAME = "ChroLens_AutoFlow"
 GITHUB_REPO = "Lucienwooo/ChroLens_AutoFlow"
@@ -418,32 +419,34 @@ class VideoListItem(QWidget):
         """初始化UI"""
         main_layout = QHBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(4)
+        main_layout.setSpacing(0)  # 緊湊佈局，無間隙
         
-        # 左側：縮圖和檔名
+        # 左側：縮圖和檔名 (可伸縮)
         left_layout = QVBoxLayout()
-        left_layout.setSpacing(4)
+        left_layout.setSpacing(0)
+        left_layout.setContentsMargins(0, 0, 0, 0)
         
         # 顯示區域疊加（縮圖 與 播放器）
         self.display_stack = QStackedWidget()
         self.display_stack.setObjectName("VideoStack")
         self.display_stack.setStyleSheet("QStackedWidget#VideoStack { background: black; border: none; padding: 0px; }")
-        self.display_stack.setFixedSize(320, 180)
+        # 移除固定大小，改為最小尺寸與伸縮策略
+        self.display_stack.setMinimumSize(320, 180) 
+        self.display_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # 縮圖
         self.thumbnail_label = QLabel()
-        self.thumbnail_label.setFixedSize(320, 180)
         bg_color = "#2C2C2E" if self.is_dark else "#E5E5EA"
         self.thumbnail_label.setStyleSheet(f"background-color: {bg_color}; border-radius: 0px;")
-        self.thumbnail_label.setScaledContents(True)
+        self.thumbnail_label.setScaledContents(False) # 關閉自動填滿，改用手動縮放
+        self.thumbnail_label.setAlignment(Qt.AlignmentFlag.AlignCenter) # 圖片置中
         self.thumbnail_label.setMouseTracking(True)
         self.thumbnail_label.installEventFilter(self)
         
         # 內嵌播放器
         self.video_widget = QVideoWidget()
-        self.video_widget.setFixedSize(320, 180)
         self.video_widget.setStyleSheet("border: none;")
-        self.video_widget.installEventFilter(self) # 增加事件監聽
+        self.video_widget.installEventFilter(self)
         self.media_player.setVideoOutput(self.video_widget)
         
         self.display_stack.addWidget(self.thumbnail_label)
@@ -451,9 +454,9 @@ class VideoListItem(QWidget):
         
         self.load_thumbnail()
         
-        # 播放進度條（取代原本的 QProgressBar 以支援點擊跳轉）
+        # 播放進度條
         self.progress_bar = ClickableSlider(Qt.Orientation.Horizontal)
-        self.progress_bar.setFixedSize(320, 6)
+        self.progress_bar.setFixedHeight(6) # 固定高度，寬度自適應
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setValue(0)
         progress_color = "#007AFF" if self.is_dark else "#0066CC"
@@ -471,7 +474,7 @@ class VideoListItem(QWidget):
             }}
             QSlider::sub-page:horizontal {{
                 background: {progress_color};
-                border-radius: 2px;
+                border-radius: 0px;
             }}
         """)
         self.progress_bar.sliderMoved.connect(self.seek_video)
@@ -479,59 +482,56 @@ class VideoListItem(QWidget):
         self.progress_bar.sliderReleased.connect(self.on_slider_released)
         self.is_seeking = False
         
-        # 檔名
+        # 檔名 (背景半透明疊加或置於底部)
         self.filename_label = QLabel(self.video_path.name)
         text_color = "#E5E5EA" if self.is_dark else "#1C1C1E"
-        self.filename_label.setStyleSheet(f"font-size: 10px; color: {text_color};")
-        self.filename_label.setWordWrap(True)
-        self.filename_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.filename_label.setMaximumWidth(320)
+        self.filename_label.setStyleSheet(f"font-size: 10px; color: {text_color}; background-color: #1C1C1E; padding: 2px;")
+        self.filename_label.setWordWrap(False) # 不換行，超出顯示...
+        self.filename_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         
-        left_layout.addWidget(self.display_stack)
+        left_layout.addWidget(self.display_stack, 1) # 權重1，佔據主要空間
         left_layout.addWidget(self.progress_bar)
         left_layout.addWidget(self.filename_label)
         
-        # 右側：按鈕群組
+        # 右側：按鈕群組 (固定寬度，緊貼左側)
         button_layout = QVBoxLayout()
-        button_layout.setSpacing(4)
+        button_layout.setSpacing(2) # 按鈕間微小間隙
         button_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         button_layout.setContentsMargins(0, 0, 0, 0)
         
         self.play_btn = QPushButton("播放")
-        self.play_btn.setFixedSize(60, 32)
+        self.play_btn.setFixedSize(50, 30) # 稍微縮小按鈕
         self.play_btn.setStyleSheet(self.get_button_style("#34C759"))
         self.play_btn.clicked.connect(self.toggle_inline_playback)
         
         self.rename_btn = QPushButton("更名")
-        self.rename_btn.setFixedSize(60, 32)
+        self.rename_btn.setFixedSize(50, 30)
         self.rename_btn.setStyleSheet(self.get_button_style("#007AFF"))
         self.rename_btn.clicked.connect(self.rename_video)
         
         self.delete_btn = QPushButton("刪除")
-        self.delete_btn.setFixedSize(60, 32)
+        self.delete_btn.setFixedSize(50, 30)
         self.delete_btn.setStyleSheet(self.get_button_style("#FF3B30"))
         self.delete_btn.clicked.connect(self.delete_video)
         
-        # 音量控制條 (移除圖示，寬度設為 60)
+        # 音量控制條
         self.vol_slider = QSlider(Qt.Orientation.Horizontal)
         self.vol_slider.setRange(0, 100)
         self.vol_slider.setValue(50)
-        self.vol_slider.setFixedSize(60, 20) # 寬度與按鈕一致
+        self.vol_slider.setFixedSize(50, 15)
         self.vol_slider.setStyleSheet("""
             QSlider::groove:horizontal {
                 border: 1px solid #3A3A3C;
-                height: 4px;
+                height: 2px;
                 background: #3A3A3C;
-                margin: 2px 0;
-                border-radius: 2px;
+                border-radius: 1px;
             }
             QSlider::handle:horizontal {
                 background: #8E8E93;
-                border: 1px solid #8E8E93;
-                width: 12px;
-                height: 12px;
-                margin: -5px 0;
-                border-radius: 6px;
+                width: 8px;
+                height: 8px;
+                margin: -3px 0;
+                border-radius: 4px;
             }
         """)
         self.vol_slider.valueChanged.connect(self.update_volume)
@@ -539,11 +539,11 @@ class VideoListItem(QWidget):
         button_layout.addWidget(self.play_btn)
         button_layout.addWidget(self.rename_btn)
         button_layout.addWidget(self.delete_btn)
-        button_layout.addWidget(self.vol_slider) # 直接加入滑桿
-        button_layout.addStretch()
+        button_layout.addWidget(self.vol_slider)
+        button_layout.addStretch() # 讓按鈕靠上
         
-        main_layout.addLayout(left_layout)
-        main_layout.addLayout(button_layout)
+        main_layout.addLayout(left_layout, 1) # 左側自適應伸縮
+        main_layout.addLayout(button_layout)  # 右側固定
         
         self.setLayout(main_layout)
         
@@ -559,7 +559,7 @@ class VideoListItem(QWidget):
                 background-color: {color};
                 color: white;
                 border: none;
-                border-radius: 6px;
+                border-radius: 0px; 
                 font-size: 11px;
                 font-weight: bold;
             }}
@@ -570,7 +570,41 @@ class VideoListItem(QWidget):
                 background-color: {color}AA;
             }}
         """
+
+    def update_volume(self, value):
+        """更新個別影片音量"""
+        self.audio_output.setVolume(value / 100.0)
+
+    def load_thumbnail(self):
+        """載入縮圖 (高解析度)"""
+        try:
+            cap = cv2.VideoCapture(str(self.video_path))
+            cap.set(cv2.CAP_PROP_POS_MSEC, 5000)
+            ret, frame = cap.read()
+            cap.release()
+            
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = frame.shape
+                bytes_per_line = ch * w
+                qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+                pixmap = QPixmap.fromImage(qt_image)
+                
+                # 保持比例縮放，不延展
+                # 注意：這裡使用 KeepAspectRatio 來避免直式影片變形，
+                # 但因為我們希望填滿 Grid，需配合 QLabel 的setAlignment 讓其置中
+                scaled_pixmap = pixmap.scaled(self.thumbnail_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.thumbnail_label.setPixmap(scaled_pixmap)
+                self.thumbnail_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        except:
+            pass
+
     
+    def update_video_position(self, position):
+        """更新播放進度條位元"""
+        if not self.is_seeking and self.media_player.duration() > 0:
+            self.progress_bar.setValue(int(position * 1000 / self.media_player.duration()))
+
     def eventFilter(self, obj, event):
         """事件過濾器"""
         # 顯示區域點擊 (縮圖或影片畫面)
@@ -601,7 +635,7 @@ class VideoListItem(QWidget):
                 return True
         
         return super().eventFilter(obj, event)
-    
+
     def load_frame_at_progress(self, progress):
         """載入指定進度的畫面"""
         if self.total_frames == 0:
@@ -621,36 +655,12 @@ class VideoListItem(QWidget):
                 bytes_per_line = ch * w
                 qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
                 pixmap = QPixmap.fromImage(qt_image)
-                self.thumbnail_label.setPixmap(pixmap.scaled(320, 180, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                
+                # 保持比例縮放，不延展
+                scaled_pixmap = pixmap.scaled(self.thumbnail_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self.thumbnail_label.setPixmap(scaled_pixmap)
         except Exception as e:
-            print(f"載入畫面失敗: {e}")
-    
-    def update_volume(self, value):
-        """更新個別影片音量"""
-        self.audio_output.setVolume(value / 100.0)
-
-    def load_thumbnail(self):
-        """載入縮圖"""
-        try:
-            cap = cv2.VideoCapture(str(self.video_path))
-            cap.set(cv2.CAP_PROP_POS_MSEC, 5000)
-            ret, frame = cap.read()
-            cap.release()
-            
-            if ret:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                h, w, ch = frame.shape
-                bytes_per_line = ch * w
-                qt_image = QImage(frame.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-                pixmap = QPixmap.fromImage(qt_image)
-                self.thumbnail_label.setPixmap(pixmap.scaled(320, 180, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-        except:
             pass
-    
-    def update_video_position(self, position):
-        """更新播放進度條位元"""
-        if not self.is_seeking and self.media_player.duration() > 0:
-            self.progress_bar.setValue(int(position * 1000 / self.media_player.duration()))
 
     def update_video_duration(self, duration):
         """更新影片總時長"""
@@ -960,6 +970,13 @@ class MainWindow(QMainWindow):
         
         folder_layout.addWidget(folder_label)
         folder_layout.addStretch()
+        
+        # 包含子資料夾開關 (移至瀏覽按鈕旁)
+        self.include_subfolders_checkbox = QCheckBox("包含子資料夾")
+        self.include_subfolders_checkbox.setStyleSheet("font-size: 11px;")
+        self.include_subfolders_checkbox.stateChanged.connect(self.on_subfolder_toggle)
+        folder_layout.addWidget(self.include_subfolders_checkbox)
+        
         folder_layout.addWidget(self.select_folder_btn)
         
         self.folder_path_label = QLabel("未選擇")
@@ -991,15 +1008,9 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.player_btn)
         button_layout.addWidget(self.about_btn)
         
-        # 包含子資料夾開關
-        self.include_subfolders_checkbox = QCheckBox("包含子資料夾")
-        self.include_subfolders_checkbox.setStyleSheet("font-size: 11px;")
-        self.include_subfolders_checkbox.stateChanged.connect(self.on_subfolder_toggle)
-        
         control_layout.addLayout(folder_layout)
         control_layout.addWidget(self.folder_path_label)
         control_layout.addLayout(button_layout)
-        control_layout.addWidget(self.include_subfolders_checkbox)
         
         left_layout.addLayout(header_layout)
         left_layout.addLayout(stats_layout)
@@ -1016,16 +1027,16 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(4)
         right_layout.setContentsMargins(0, 0, 0, 0)
         
-        list_header = QHBoxLayout()
-        self.list_title = QLabel("影片列表")
-        self.list_title.setStyleSheet("font-size: 11px; font-weight: 600;")
+        # list_header = QHBoxLayout()
+        # self.list_title = QLabel("影片列表")
+        # self.list_title.setStyleSheet("font-size: 11px; font-weight: 600;")
         
-        self.list_hint = QLabel("滑鼠懸停即時預覽 | 點擊播放按鈕開啟影片")
-        self.list_hint.setStyleSheet("font-size: 9px;")
+        # self.list_hint = QLabel("滑鼠懸停即時預覽 | 點擊播放按鈕開啟影片")
+        # self.list_hint.setStyleSheet("font-size: 9px;")
         
-        list_header.addWidget(self.list_title)
-        list_header.addStretch()
-        list_header.addWidget(self.list_hint)
+        # list_header.addWidget(self.list_title)
+        # list_header.addStretch()
+        # list_header.addWidget(self.list_hint)
         
         # 影片列表（網格佈局）
         scroll_area = QScrollArea()
@@ -1033,14 +1044,15 @@ class MainWindow(QMainWindow):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         self.video_grid_widget = QWidget()
+        self.video_grid_widget.setObjectName("VideoGrid")
         self.video_grid_layout = QGridLayout()
-        self.video_grid_layout.setSpacing(2)
+        self.video_grid_layout.setSpacing(0)
         self.video_grid_layout.setContentsMargins(0, 0, 0, 0)
         self.video_grid_widget.setLayout(self.video_grid_layout)
         
         scroll_area.setWidget(self.video_grid_widget)
         
-        right_layout.addLayout(list_header)
+        # right_layout.addLayout(list_header)
         right_layout.addWidget(scroll_area)
         self.right_panel.setLayout(right_layout)
         
@@ -1067,6 +1079,23 @@ class MainWindow(QMainWindow):
             QMainWindow { background-color: #1C1C1E; }
             QWidget { color: #E5E5EA; }
             QLabel { color: #E5E5EA; }
+            QPushButton {
+                background-color: #3A3A3C;
+                color: #E5E5EA;
+                border: 1px solid #3A3A3C;
+                border-radius: 4px;
+                padding: 4px 8px;
+            }
+            QPushButton:hover {
+                background-color: #48484A;
+            }
+            QPushButton:pressed {
+                background-color: #2C2C2E;
+            }
+            QPushButton:disabled {
+                background-color: #2C2C2E;
+                color: #636366;
+            }
         """)
         
         self.progress_widget.setStyleSheet("""
@@ -1090,6 +1119,27 @@ class MainWindow(QMainWindow):
                 background-color: #2C2C2E;
                 border-radius: 8px;
                 padding: 8px;
+            }
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #2C2C2E;
+                width: 8px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #48484A;
+                min-height: 20px;
+                border-radius: 4px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QWidget#VideoGrid {
+                background-color: transparent;
             }
         """)
         

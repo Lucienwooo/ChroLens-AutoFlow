@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from PyQt6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QPushButton, QListWidget, QFrame, QSlider, 
-                             QGridLayout, QScrollArea)
+                             QGridLayout, QScrollArea, QSplitter)
 from PyQt6.QtCore import Qt, pyqtSignal, QUrl, QMimeData
 from PyQt6.QtGui import QPixmap, QImage, QDrag, QFontMetrics
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -71,13 +71,14 @@ class MultiPlayerWindow(QDialog):
     def init_ui(self):
         self.setWindowTitle("多視窗播放器 (9宮格)")
         self.resize(1800, 950)
+        self.setStyleSheet("background-color: #1C1C1E; color: #E5E5EA;")
         
         main_layout = QHBoxLayout()
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(10, 10, 10, 10)
         
         left_panel = QWidget()
-        left_panel.setFixedWidth(280)
+        # left_panel.setFixedWidth(280) # 改用 Splitter 後不需固定寬度，改由 user 調整
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -86,9 +87,12 @@ class MultiPlayerWindow(QDialog):
         
         self.video_list = DraggableListWidget()
         self.video_list.setDragEnabled(True)
+        self.video_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.video_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.video_list.setStyleSheet("""
             QListWidget {
                 background-color: #2C2C2E;
+                border: none;
                 border-radius: 6px;
                 color: white;
             }
@@ -103,6 +107,9 @@ class MultiPlayerWindow(QDialog):
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        # 移除卷軸 (根據需求)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("border: none; background: transparent;")
         
         grid_container = QWidget()
@@ -115,10 +122,35 @@ class MultiPlayerWindow(QDialog):
             grid_layout.addWidget(player_widget, i // 3, i % 3)
             self.player_widgets.append(player_widget)
             
+        # 設定行列伸縮比例，確保均分空間
+        for i in range(3):
+            grid_layout.setRowStretch(i, 1)
+            grid_layout.setColumnStretch(i, 1)
+            
+        # 移除間隔
+        grid_layout.setSpacing(0)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+            
+        scroll.setWidget(grid_container)
         scroll.setWidget(grid_container)
         
-        main_layout.addWidget(left_panel)
-        main_layout.addWidget(scroll, 1)
+        # 使用 QSplitter 來支援拖曳調整寬度
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #3A3A3C;
+                width: 2px;
+            }
+        """)
+        
+        splitter.addWidget(left_panel)
+        splitter.addWidget(scroll)
+        
+        # 設定初始比例 (例如 280:剩餘寬度)
+        splitter.setSizes([280, 1520])
+        splitter.setCollapsible(0, False) # 防止列表被完全隱藏
+        
+        main_layout.addWidget(splitter)
         self.setLayout(main_layout)
     
     def on_video_dropped(self, player_index, video_name):
@@ -140,7 +172,10 @@ class VideoPlayerWidget(QFrame):
         super().__init__()
         self.index = index
         self.video_path = None
-        self.setFixedSize(540, 380) 
+        # 移除固定大小，改為可伸縮
+        # self.setFixedSize(540, 380) 
+        from PyQt6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setAcceptDrops(True)
         
         self.media_player = None
@@ -160,7 +195,7 @@ class VideoPlayerWidget(QFrame):
         
         self.info_label = QLabel(f"播放器 {self.index + 1}\n(右鍵清除)")
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.info_label.setStyleSheet("color: #555; font-size: 12px;")
+        self.info_label.setStyleSheet("color: #8E8E93; font-size: 14px; background-color: #2C2C2E;")
         v_layout.addWidget(self.info_label)
         
         self.video_widget = QVideoWidget()
@@ -174,8 +209,12 @@ class VideoPlayerWidget(QFrame):
         c_layout.setContentsMargins(8, 0, 8, 0)
         c_layout.setSpacing(10)
         
-        self.play_btn = QPushButton("P")
-        self.play_btn.setFixedSize(30, 30)
+        self.play_btn = QPushButton("▶")
+        self.play_btn.setFixedSize(24, 24)
+        self.play_btn.setStyleSheet("""
+            QPushButton { background-color: #3A3A3C; color: white; border: none; border-radius: 4px; }
+            QPushButton:hover { background-color: #48484A; }
+        """)
         self.play_btn.clicked.connect(self.toggle)
         
         self.seek_slider = ClickableSlider(Qt.Orientation.Horizontal)
@@ -184,8 +223,8 @@ class VideoPlayerWidget(QFrame):
         # 設定最小寬度為總寬度的約一半 (250px)
         self.seek_slider.setMinimumWidth(250)
         self.seek_slider.setStyleSheet("""
-            QSlider::groove:horizontal { border: 1px solid #333; height: 4px; background: #444; border-radius: 2px; }
-            QSlider::handle:horizontal { background: #007AFF; width: 10px; height: 10px; margin: -4px 0; border-radius: 5px; }
+            QSlider::groove:horizontal { border: none; height: 4px; background: #3A3A3C; border-radius: 2px; }
+            QSlider::handle:horizontal { background: #007AFF; width: 10px; height: 10px; margin: -3px 0; border-radius: 5px; }
         """)
         self.seek_slider.sliderMoved.connect(self.set_position)
         self.seek_slider.sliderPressed.connect(self.on_seek_pressed)
@@ -198,7 +237,7 @@ class VideoPlayerWidget(QFrame):
         self.vol_slider.valueChanged.connect(lambda v: self.audio_output.setVolume(v/100.0) if self.audio_output else None)
         
         self.name_label = ElidedLabel("等待拖曳")
-        self.name_label.setStyleSheet("font-size: 9px; color: gray;")
+        self.name_label.setStyleSheet("font-size: 10px; color: #8E8E93;")
         
         c_layout.addWidget(self.play_btn)
         c_layout.addWidget(self.seek_slider, 2) # 進度條優先權較高
@@ -233,7 +272,7 @@ class VideoPlayerWidget(QFrame):
         self.video_widget.hide()
         self.info_label.show()
         self.name_label.setText("等待拖曳")
-        self.play_btn.setText("P")
+        self.play_btn.setText("▶")
         self.video_path = None
         self.seek_slider.setValue(0)
 
@@ -267,16 +306,16 @@ class VideoPlayerWidget(QFrame):
         self.video_widget.show()
         self.media_player.setSource(QUrl.fromLocalFile(str(path)))
         self.media_player.play()
-        self.play_btn.setText("||")
+        self.play_btn.setText("⏸")
 
     def toggle(self):
         if not self.video_path or not self.media_player: return
         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.media_player.pause()
-            self.play_btn.setText("P")
+            self.play_btn.setText("▶")
         else:
             self.media_player.play()
-            self.play_btn.setText("||")
+            self.play_btn.setText("⏸")
 
     def update_position(self, position):
         if not self.is_seeking and self.media_player.duration() > 0:

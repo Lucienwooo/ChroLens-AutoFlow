@@ -71,7 +71,6 @@ pyinstaller --name="AutoFlow" ^
     --add-data="version_manager.py;." ^
     --add-data="version_info_dialog.py;." ^
     --add-data="multi_player.py;." ^
-    --add-data="video_list_item_new.py;." ^
     --add-data="about.py;." ^
     --add-data="pic;pic" ^
     --add-data="TTF;TTF" ^
