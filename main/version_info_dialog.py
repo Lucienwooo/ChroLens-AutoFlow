@@ -262,14 +262,34 @@ class VersionInfoDialog(QDialog):
             self.stat_val.setText("目前已是最新版本")
             self.stat_val.setStyleSheet("color: #8E8E93;")
             
-            # v1.2.0 更新說明
+            # v1.1.0 / v1.2.0 更新說明
             release_notes = (
                 "【v1.2.0 更新內容】\n"
                 "1. 介面優化: 影片列表移除捲軸，改為自適應佈局\n"
                 "2. 新增功能: 多窗瀏覽改版，支援 9 宮格與拖曳調整視窗比例\n"
                 "3. 修正: 縮圖與影片尺寸比例問題，支援直式影片不變形\n"
                 "4. 修正: 深色模式下按鈕文字清晰度問題\n"
-                "5. 修正: 多窗瀏覽與主介面主題統一"
+                "5. 修正: 多窗瀏覽與主介面主題統一\n"
+                "\n"
+                "【v1.1.0 更新內容】\n"
+                "── JavMix 搜尋 & 下載整合 ──\n"
+                " 1. 新增: JavMix 番號搜尋工具整合進主介面\n"
+                " 2. 新增: 搜尋結果改為橫向卡片佈局，附縮圖預覽（自動從 DMM 抓取）\n"
+                " 3. 新增: 縮圖本地磁碟快取（TEMP/autoflow_thumbs），重搜秒顯示\n"
+                " 4. 新增: 卡片顯示女優名稱（解析自影片頁面 og:description）\n"
+                " 5. 新增: 卡片區支援滑鼠滾輪左右橫移\n"
+                " 6. 新增: HLS 串流下載器（yt-dlp 驅動），支援 Origin / Ai解碼 兩版本\n"
+                " 7. 新增: 下載命名 — 原版 CODE.mp4 / Ai解碼 MOSAIC-CODE.mp4\n"
+                " 8. 新增: 下載失敗自動重試（重新取得 CDN Token）\n"
+                " 9. 新增: yt-dlp 真實錯誤訊息顯示（stderr 分離捕獲）\n"
+                "10. 新增: ✕ 強制刪除按鈕，取消並刪除未完成檔案\n"
+                "── 搜尋增強 ──\n"
+                "11. 新增: FC2-PPV 多變體 URL 搜尋（含 /fc2ppv/ 路徑）\n"
+                "12. 修正: 貼上多行番號時換行符號正確保留\n"
+                "── UI 調整 ──\n"
+                "13. 調整: 介面移除多餘 emoji，僅保留 ⬇ 下載圖示\n"
+                "14. 修正: ⬇ 及 ✕ 按鈕滑鼠游標改為小手形狀\n"
+                "15. 調整: 下載最高畫質（-f bestvideo+bestaudio），強制 mp4 輸出\n"
             )
             self.notes_text.setPlainText(release_notes)
 

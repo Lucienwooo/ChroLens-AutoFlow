@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 AutoFlow - 智能影片自動分類工具
-版本: 1.0.0
+版本: 1.2.0
 作者: Lucien
 授權: GPL v3 + Commercial
 """
